@@ -795,45 +795,30 @@ function renderLogOnly() {
     return;
   }
 
-  // Render in batches via requestAnimationFrame so UI stays responsive
-  const batchSize = 200;
-  let idx = 0;
+  // Render everything in one shot (build string, one innerHTML)
+  // No batching needed — for typical chatlogs this is <20ms
   let html = '';
-
-  function renderBatch() {
-    const end = Math.min(idx + batchSize, visible.length);
-    for (; idx < end; idx++) {
-      const line = visible[idx];
-      const speakerColor = scheme[line.channel] || scheme.default;
-      html += '<div class="log-line">';
-      if (showTimestamps && line.timestamp) {
-        html += '<span class="log-ts">[' + line.timestamp + ']</span>';
-      }
-      if (showChannel && line.channel !== 'default') {
-        html += '<span class="channel-' + line.channel + '" style="opacity:0.5;font-size:11px;">(' + line.channel + ') </span>';
-      }
-      if (line.speaker) {
-        html += '<span class="log-speaker" style="color:' + speakerColor + '">' + escapeHtml(line.speaker) + '</span>';
-        if (!line.isEmote) html += ': ';
-      }
-      if (line.isEmote) {
-        html += '<span style="font-style:italic"> ' + escapeHtml(line.message) + '</span>';
-      } else {
-        html += escapeHtml(line.message);
-      }
-      html += '</div>';
+  for (const line of visible) {
+    const speakerColor = scheme[line.channel] || scheme.default;
+    html += '<div class="log-line">';
+    if (showTimestamps && line.timestamp) {
+      html += '<span class="log-ts">[' + line.timestamp + ']</span>';
     }
-    if (idx >= visible.length) {
-      container.innerHTML = html;
-      return;
+    if (showChannel && line.channel !== 'default') {
+      html += '<span class="channel-' + line.channel + '" style="opacity:0.5;font-size:11px;">(' + line.channel + ') </span>';
     }
-    // Write partial and schedule next batch
-    container.innerHTML = html;
-    html = '';
-    requestAnimationFrame(renderBatch);
+    if (line.speaker) {
+      html += '<span class="log-speaker" style="color:' + speakerColor + '">' + escapeHtml(line.speaker) + '</span>';
+      if (!line.isEmote) html += ': ';
+    }
+    if (line.isEmote) {
+      html += '<span style="font-style:italic"> ' + escapeHtml(line.message) + '</span>';
+    } else {
+      html += escapeHtml(line.message);
+    }
+    html += '</div>';
   }
-
-  renderBatch();
+  container.innerHTML = html;
 }
 
 function render() {
