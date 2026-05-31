@@ -738,12 +738,11 @@ let speakerMessageCount = {};
 
 // ─── Rendering ───
 
-function render() {
+function renderLogOnly() {
   const showSystem = document.getElementById('toggleSys').classList.contains('active');
   const showCombat = document.getElementById('toggleCombat').classList.contains('active');
   const showTimestamps = document.getElementById('toggleTimestamps').classList.contains('active');
   const showChannel = document.getElementById('toggleChannelTags').classList.contains('active');
-  const searchTerm = document.getElementById('speakerSearch').value.toLowerCase();
   const scheme = colorSchemes[currentScheme];
 
   const container = document.getElementById('logContainer');
@@ -754,35 +753,23 @@ function render() {
   let html = '';
 
   for (const line of parsedLines) {
-    // System filter
     if (line.isSystem && !showSystem) continue;
-
-    // Combat spam filter
     if (line.isCombat && !showCombat) continue;
-
-    // Speaker filter
     if (line.speaker && !selectedSpeakers.has(line.speaker)) continue;
 
-    const chClass = `channel-${line.channel}`;
     const speakerColor = scheme[line.channel] || scheme.default;
-
     let lineHtml = '<div class="log-line">';
-
     if (showTimestamps && line.timestamp) {
       lineHtml += `<span class="log-ts">[${line.timestamp}]</span>`;
     }
-
     if (showChannel && line.channel !== 'default') {
       lineHtml += `<span class="channel-${line.channel}" style="opacity:0.5;font-size:11px;">(${line.channel}) </span>`;
     }
-
     if (line.speaker) {
       lineHtml += `<span class="log-speaker" style="color:${speakerColor}">${escapeHtml(line.speaker)}</span>: `;
     }
-
     lineHtml += escapeHtml(line.message);
     lineHtml += '</div>';
-
     html += lineHtml;
     shown++;
   }
@@ -792,7 +779,11 @@ function render() {
   totalCount.textContent = parsedLines.length;
   document.getElementById('output').classList.add('visible');
   document.getElementById('controls').classList.add('visible');
+}
 
+function render() {
+  const searchTerm = document.getElementById('speakerSearch').value.toLowerCase();
+  renderLogOnly();
   updateSpeakerList(searchTerm);
 }
 
@@ -819,7 +810,7 @@ function updateSpeakerList(filter) {
     const name = cb.dataset.speaker;
     if (selectedSpeakers.has(name)) selectedSpeakers.delete(name);
     else selectedSpeakers.add(name);
-    render();
+    renderLogOnly();
   };
   list._speakerHandler = handler;
   list.addEventListener('change', handler);
@@ -960,19 +951,19 @@ input.addEventListener('change', () => {
 // Toggles
 document.getElementById('toggleSys').addEventListener('click', function() {
   this.classList.toggle('active');
-  render();
+  renderLogOnly();
 });
 document.getElementById('toggleCombat').addEventListener('click', function() {
   this.classList.toggle('active');
-  render();
+  renderLogOnly();
 });
 document.getElementById('toggleTimestamps').addEventListener('click', function() {
   this.classList.toggle('active');
-  render();
+  renderLogOnly();
 });
 document.getElementById('toggleChannelTags').addEventListener('click', function() {
   this.classList.toggle('active');
-  render();
+  renderLogOnly();
 });
 
 // Select all / deselect all
@@ -1002,7 +993,7 @@ document.querySelectorAll('.color-pick').forEach(el => {
     document.querySelectorAll('.color-pick').forEach(c => c.classList.remove('active'));
     this.classList.add('active');
     currentScheme = this.dataset.scheme;
-    render();
+    renderLogOnly();
   });
 });
 
