@@ -638,9 +638,8 @@ function parseLine(raw) {
   const isNPC = message.startsWith('"') && message.includes('"');
 
   // Detect combat/proc spam lines
-  const isCombat = /^(You hit|Your |You activate|You use|You perform)/.test(message) &&
-    /(hit|damage|heal|endurance|health|recharge|resistance|defense|tohit|accuracy)/i.test(message);
-  const isProc = /granting (them|you) .* points of/i.test(message);
+  const isCombat = /^(You |Your |\w+ (hits|heals|damages|activates|uses|performs) you)/.test(message) ||
+    /(for \d+\.\d+ (health|endurance|hit|damage) points|granting .* points of|with your |with their )/i.test(message);
 
   return {
     raw: trimmed,
