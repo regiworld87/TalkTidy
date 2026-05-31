@@ -585,7 +585,7 @@ function deductToken() {
 
 function updateTokenBadge() {
   const t = getTokens();
-  document.getElementById('tokenBadge').textContent = `${t > 0 ? t : FREE_LIMIT - freeTokensUsed} tokens`;
+  $('tokenBadge').textContent = `${t > 0 ? t : FREE_LIMIT - freeTokensUsed} tokens`;
 }
 
 // ─── Parsing ───
@@ -738,19 +738,33 @@ let speakerMessageCount = {};
 
 // ─── Rendering ───
 
+// Cache DOM refs for speed
+let _logContainer, _totalCount, _shownCount, _output, _controls, _speakerList;
+function $(id) {
+  const map = { logContainer:1, totalCount:1, shownCount:1, output:1, controls:1, speakerList:1,
+    toggleSys:1, toggleCombat:1, toggleTimestamps:1, toggleChannelTags:1, speakerSearch:1,
+    selectAllBtn:1, deselectAllBtn:1, tokenBadge:1, tokenModal:1, fileInput:1, uploadZone:1,
+    logContainer:1, copyBtn:1, exportTxtBtn:1, exportBtn:1, colorScheme:1 };
+  if (map[id]) {
+    if (!window['_dom_' + id]) window['_dom_' + id] = document.getElementById(id);
+    return window['_dom_' + id];
+  }
+  return document.getElementById(id);
+}
+
 function renderLogOnly() {
-  const showSystem = document.getElementById('toggleSys').classList.contains('active');
-  const showCombat = document.getElementById('toggleCombat').classList.contains('active');
-  const showTimestamps = document.getElementById('toggleTimestamps').classList.contains('active');
-  const showChannel = document.getElementById('toggleChannelTags').classList.contains('active');
+  const showSystem = $('toggleSys').classList.contains('active');
+  const showCombat = $('toggleCombat').classList.contains('active');
+  const showTimestamps = $('toggleTimestamps').classList.contains('active');
+  const showChannel = $('toggleChannelTags').classList.contains('active');
   const scheme = colorSchemes[currentScheme];
 
-  const container = document.getElementById('logContainer');
-  const totalCount = document.getElementById('totalCount');
-  const shownCount = document.getElementById('shownCount');
+  const container = $('logContainer');
+  const totalCount = $('totalCount');
+  const shownCount = $('shownCount');
 
   let shown = 0;
-  let html = '';
+  let parts = [];
 
   for (const line of parsedLines) {
     if (line.isSystem && !showSystem) continue;
@@ -758,27 +772,26 @@ function renderLogOnly() {
     if (line.speaker && !selectedSpeakers.has(line.speaker)) continue;
 
     const speakerColor = scheme[line.channel] || scheme.default;
-    let lineHtml = '<div class="log-line">';
+    let s = '<div class="log-line">';
     if (showTimestamps && line.timestamp) {
-      lineHtml += `<span class="log-ts">[${line.timestamp}]</span>`;
+      s += '<span class="log-ts">[' + line.timestamp + ']</span>';
     }
     if (showChannel && line.channel !== 'default') {
-      lineHtml += `<span class="channel-${line.channel}" style="opacity:0.5;font-size:11px;">(${line.channel}) </span>`;
+      s += '<span class="channel-' + line.channel + '" style="opacity:0.5;font-size:11px;">(' + line.channel + ') </span>';
     }
     if (line.speaker) {
-      lineHtml += `<span class="log-speaker" style="color:${speakerColor}">${escapeHtml(line.speaker)}</span>: `;
+      s += '<span class="log-speaker" style="color:' + speakerColor + '">' + escapeHtml(line.speaker) + '</span>: ';
     }
-    lineHtml += escapeHtml(line.message);
-    lineHtml += '</div>';
-    html += lineHtml;
+    s += escapeHtml(line.message) + '</div>';
+    parts[shown] = s;
     shown++;
   }
 
-  container.innerHTML = html;
+  container.innerHTML = parts.join('');
   shownCount.textContent = shown;
   totalCount.textContent = parsedLines.length;
-  document.getElementById('output').classList.add('visible');
-  document.getElementById('controls').classList.add('visible');
+  $('output').classList.add('visible');
+  $('controls').classList.add('visible');
 }
 
 function render() {
@@ -820,9 +833,8 @@ function updateSpeakerList(filter) {
 }
 
 function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // ─── File Processing ───
