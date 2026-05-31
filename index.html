@@ -928,7 +928,6 @@ zone.addEventListener('drop', (e) => {
   zone.classList.remove('dragover');
   const file = e.dataTransfer.files[0];
   if (file) {
-    input.files = e.dataTransfer.files;
     const reader = new FileReader();
     reader.onload = (ev) => processFile(ev.target.result);
     reader.readAsText(file);
