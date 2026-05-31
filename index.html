@@ -526,6 +526,7 @@ header .sub {
       <div class="stats">Showing <strong id="shownCount">0</strong> of <strong id="totalCount">0</strong> lines</div>
       <div class="actions">
         <a class="btn" id="copyBtn" href="#">📋 Copy</a>
+        <a class="btn" id="exportTxtBtn" href="#">⬇ Export TXT</a>
         <a class="btn btn-primary" id="exportBtn" href="#">⬇ Export HTML</a>
       </div>
     </div>
@@ -911,6 +912,19 @@ document.getElementById('exportBtn').addEventListener('click', (e) => {
   const a = document.createElement('a');
   a.href = url;
   a.download = 'coh-chatlog-export.html';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('exportTxtBtn').addEventListener('click', (e) => {
+  e.preventDefault();
+  const container = document.getElementById('logContainer');
+  const text = container.textContent || container.innerText;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'coh-chatlog-export.txt';
   a.click();
   URL.revokeObjectURL(url);
 });
