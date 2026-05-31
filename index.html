@@ -656,16 +656,27 @@ function parseLine(raw) {
     message = rest.slice(speakerMatch[0].length);
   }
 
+  // Emote detection: \"Go Fetch waves to Valor.\" (no colon, starts with name)
+  let isEmote = false;
+  if (!speaker) {
+    const emoteMatch = rest.match(/^([A-Z][a-zA-Z'\-]+(?:\s+[A-Z][a-zA-Z'\-]*)?)\s+(.+)/);
+    if (emoteMatch && !rest.match(/^(Entering|Shutting|Joined|Left|You |Your |Using |Welcome )/i)) {
+      speaker = emoteMatch[1].trim();
+      message = emoteMatch[2].trim();
+      isEmote = true;
+    }
+  }
+
   // Combat lines with colons like \"TalonKnight heals you with their Panacea: ...\"
   // These should not have the speaker set since the colon is part of the combat message
-  if (speaker && (/(Panacea|Performance Shifter|Numina|Miracle|Synapse|Gladiator)/i.test(rest) ||
+  if (speaker && !isEmote && (/(Panacea|Performance Shifter|Numina|Miracle|Synapse|Gladiator)/i.test(rest) ||
       /^(HIT |\w+ HITS )/.test(rest))) {
     message = rest;
     speaker = '';
   }
 
-  // Detect system messages (no colon = no speaker = system line)
-  const isSystem = speaker === '' ||
+  // Detect system messages (no colon, no emote = system line)
+  const isSystem = (speaker === '' && !isEmote) ||
     /^(Joined|Left|Entering|Shutting|You have|You may|You are|Using global|Welcome|Your .+ was waived)/.test(message) ||
     message.startsWith('---') ||
     channel === 'sys' ||
@@ -693,7 +704,8 @@ function parseLine(raw) {
     message,
     isSystem,
     isNPC,
-    isCombat
+    isCombat,
+    isEmote
   };
 }
 
@@ -801,9 +813,15 @@ function renderLogOnly() {
         html += '<span class="channel-' + line.channel + '" style="opacity:0.5;font-size:11px;">(' + line.channel + ') </span>';
       }
       if (line.speaker) {
-        html += '<span class="log-speaker" style="color:' + speakerColor + '">' + escapeHtml(line.speaker) + '</span>: ';
+        html += '<span class="log-speaker" style="color:' + speakerColor + '">' + escapeHtml(line.speaker) + '</span>';
+        if (!line.isEmote) html += ': ';
       }
-      html += escapeHtml(line.message) + '</div>';
+      if (line.isEmote) {
+        html += '<span style="font-style:italic"> ' + escapeHtml(line.message) + '</span>';
+      } else {
+        html += escapeHtml(line.message);
+      }
+      html += '</div>';
     }
     if (idx >= visible.length) {
       container.innerHTML = html;
