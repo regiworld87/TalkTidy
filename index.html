@@ -682,6 +682,7 @@ let currentLines = [];
 let parsedLines = [];
 let selectedSpeakers = new Set();
 let allSpeakers = [];
+let speakerMessageCount = {};
 
 // ─── Rendering ───
 
@@ -741,36 +742,34 @@ function render() {
 
 function updateSpeakerList(filter) {
   const list = document.getElementById('speakerList');
-  list.innerHTML = '';
-
   const checkedCount = selectedSpeakers.size;
   const totalSpeakers = allSpeakers.length;
 
+  let html = '';
   for (const s of allSpeakers) {
     if (filter && !s.toLowerCase().includes(filter)) continue;
-    const div = document.createElement('div');
-    div.className = 'speaker-item';
-    div.innerHTML = `
-      <input type="checkbox" ${selectedSpeakers.has(s) ? 'checked' : ''}>
-      <span>${escapeHtml(s)}</span>
-      <span class="count">${countBySpeaker(s)}</span>
-    `;
-    div.querySelector('input').addEventListener('change', () => {
-      if (selectedSpeakers.has(s)) selectedSpeakers.delete(s);
-      else selectedSpeakers.add(s);
-      render();
-    });
-    list.appendChild(div);
+    const checked = selectedSpeakers.has(s) ? 'checked' : '';
+    const count = speakerMessageCount[s] || 0;
+    html += `<div class="speaker-item"><input type="checkbox" ${checked} data-speaker="${s.replace(/"/g,'&quot;')}"><span>${escapeHtml(s)}</span><span class="count">${count}</span></div>`;
   }
+  list.innerHTML = html;
 
-  // Update select all/deselect all button states
-  const allActive = checkedCount === totalSpeakers;
-  document.getElementById('selectAllBtn').classList.toggle('active', !allActive);
+  // Attach delegation listener once (remove old first to avoid stacking)
+  const oldHandler = list._speakerHandler;
+  if (oldHandler) list.removeEventListener('change', oldHandler);
+  const handler = e => {
+    const cb = e.target;
+    if (cb.type !== 'checkbox') return;
+    const name = cb.dataset.speaker;
+    if (selectedSpeakers.has(name)) selectedSpeakers.delete(name);
+    else selectedSpeakers.add(name);
+    render();
+  };
+  list._speakerHandler = handler;
+  list.addEventListener('change', handler);
+
+  document.getElementById('selectAllBtn').classList.toggle('active', checkedCount < totalSpeakers);
   document.getElementById('deselectAllBtn').classList.toggle('active', checkedCount > 0);
-}
-
-function countBySpeaker(name) {
-  return parsedLines.filter(l => l.speaker === name && !l.isSystem).length;
 }
 
 function escapeHtml(str) {
@@ -790,6 +789,7 @@ function processFile(text) {
   parsedLines = [];
   allSpeakers = [];
   selectedSpeakers = new Set();
+  speakerMessageCount = {};
   const speakerCounts = {};
 
   for (const line of rawLines) {
@@ -805,6 +805,8 @@ function processFile(text) {
   allSpeakers = Object.entries(speakerCounts)
     .sort((a, b) => b[1] - a[1])
     .map(([name]) => name);
+
+  speakerMessageCount = Object.fromEntries(allSpeakers.map(n => [n, speakerCounts[n]]));
 
   selectedSpeakers = new Set(allSpeakers);
 
@@ -916,7 +918,11 @@ document.getElementById('deselectAllBtn').addEventListener('click', function() {
 });
 
 // Speaker search
-document.getElementById('speakerSearch').addEventListener('input', () => render());
+let searchTimeout;
+document.getElementById('speakerSearch').addEventListener('input', () => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => render(), 100);
+});
 
 // Color scheme
 document.querySelectorAll('.color-pick').forEach(el => {
