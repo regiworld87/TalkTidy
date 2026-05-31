@@ -601,51 +601,87 @@ function parseLine(raw) {
   const trimmed = raw.trimEnd();
   if (!trimmed) return null;
 
-  // Detect channel prefix: (channel)
   let channel = 'default';
-  let rest = trimmed;
-  const chMatch = trimmed.match(/^\((\w+)\)\s*/);
-  if (chMatch) {
-    channel = chMatch[1].toLowerCase();
-    rest = trimmed.slice(chMatch[0].length);
-  }
-
-  // Extract timestamp: [HH:MM:SS] or [HH:MM]
   let timestamp = '';
-  let content = rest;
-  const tsMatch = rest.match(/^\[(\d{1,2}:\d{2}(?::\d{2})?)\]\s*/);
-  if (tsMatch) {
-    timestamp = tsMatch[1];
-    content = rest.slice(tsMatch[0].length);
+  let rest = trimmed;
+
+  // Try standard Homecoming format: (channel) [HH:MM] Speaker: message
+  let m = rest.match(/^\((\w+)\)\s*\[(\d{1,2}:\d{2}(?::\d{2})?)\]\s*/);
+  if (m) {
+    channel = m[1].toLowerCase();
+    timestamp = m[2];
+    rest = rest.slice(m[0].length);
+  } else {
+    // Try in-game log export format: YYYY-MM-DD HH:MM:SS [Channel] message
+    m = rest.match(/^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+/);
+    if (m) {
+      timestamp = m[1];
+      rest = rest.slice(m[0].length);
+    }
+    // Extract [ChannelName] after the date timestamp
+    m = rest.match(/^\[([^\]]+)\]\s*/);
+    if (m) {
+      const chName = m[1].toLowerCase();
+      const channelMap = {
+        'supergroup': 'supergroup',
+        'looking for group': 'lookingforgroup',
+        'npc': 'npc',
+        'the advocators': 'global',
+        'first defenders': 'global',
+        'og broskis': 'global',
+        'ooc': 'ooc',
+        'rp': 'rp',
+      };
+      channel = channelMap[chName] || chName;
+      rest = rest.slice(m[0].length);
+      // Strip trailing (null): from old-format global channel messages
+      rest = rest.replace(/^\(null\):\s*/, '');
+    }
+    // Skip rich-text color tags at start
+    rest = rest.replace(/^<[^>]*>\s*/, '');
+    // Skip [HH:MM] timestamp inside the message itself (CoH embed timestamps)
+    rest = rest.replace(/^\[\d{1,2}:\d{2}\]\s*/, '');
+    // Skip rich-text color tags (multiple)
+    rest = rest.replace(/<[^>]*>\s*/g, '');
   }
 
-  // Detect system messages
-  const isSystem = channel === 'sys' ||
-    content.startsWith('---') ||
-    content.startsWith('[') && content.includes('System') ||
-    /^(joined|left|has entered|has left|logged in|logged out)/i.test(content);
-
-  // Extract speaker
+  // Extract speaker (before the first \": \")
   let speaker = '';
-  let message = content;
-  const speakerMatch = content.match(/^(.+?):\s*/);
-  if (speakerMatch && !speakerMatch[1].startsWith('---')) {
+  let message = rest;
+  const speakerMatch = rest.match(/^(.+?):\s*/);
+  if (speakerMatch && !speakerMatch[1].startsWith('---') && !speakerMatch[1].startsWith('<')) {
     speaker = speakerMatch[1].trim();
-    message = content.slice(speakerMatch[0].length);
+    message = rest.slice(speakerMatch[0].length);
   }
 
-  // Clean up quoted messages (NPC dialog)
-  const isNPC = message.startsWith('"') && message.includes('"');
+  // Combat lines with colons like \"TalonKnight heals you with their Panacea: ...\"
+  // These should not have the speaker set since the colon is part of the combat message
+  if (speaker && (/(Panacea|Performance Shifter|Numina|Miracle|Synapse|Gladiator)/i.test(rest) ||
+      /^(HIT |\w+ HITS )/.test(rest))) {
+    message = rest;
+    speaker = '';
+  }
 
-  // Detect combat/proc spam lines: Panacea/Performance Shifter/etc proc messages
-  const isCombat = /(Panacea|Performance Shifter|Numina|Miracle|Synapse|Gladiator)/i.test(message) &&
-    /(heals? |hits? |damages? |for \d+\.\d+ |granting |with your |with their )/i.test(message) ||
-    // Generic combat patterns
-    /^(You (hit|heal|damage|activate|use|perform|teleport) )/.test(message) ||
-    /^(\w+ (hits|heals|damages|activates|uses|performs|teleports|Teleported|HITS|HEALS|DAMAGES) you)/.test(message) ||
-    /^(HIT |\w+ HITS )/.test(message) ||
-    /^Your .+ (power has given|is recharged|was autohit|is autohit)/.test(message) ||
-    /Combat Teleport/.test(message);
+  // Detect system messages (no colon = no speaker = system line)
+  const isSystem = speaker === '' ||
+    /^(Joined|Left|Entering|Shutting|You have|You may|You are|Using global|Welcome|Your .+ was waived)/.test(message) ||
+    message.startsWith('---') ||
+    channel === 'sys' ||
+    /^(joined|left|has entered|has left|logged in|logged out)/i.test(message);
+
+  // Detect combat/proc spam lines (check the FULL rest, not just message)
+  const isCombat = /(Panacea|Performance Shifter|Numina|Miracle|Synapse|Gladiator)/i.test(rest) ||
+    /^You (hit|heal|damage|activate|use|perform|teleport) /.test(rest) ||
+    /^\w+ (hits|heals|HITS|HEALS|damages|activates|uses|performs|teleports|Teleported) you/.test(rest) ||
+    /^(HIT |\w+ HITS )/.test(rest) ||
+    /^Your .+ (power has given|is recharged|was autohit|is autohit)/.test(rest) ||
+    /^Your .+ has given you/.test(rest) ||
+    /Combat Teleport/.test(rest) ||
+    /You're too far away to use/.test(rest) ||
+    /has Teleported you/.test(rest);
+
+  // Quoted messages (NPC dialog)
+  const isNPC = message.startsWith('"') && message.includes('"');
 
   return {
     raw: trimmed,
@@ -653,9 +689,9 @@ function parseLine(raw) {
     timestamp,
     speaker,
     message,
-    isSystem: isSystem || channel === 'sys' || channel === 'help' || channel === 'request',
+    isSystem,
     isNPC,
-    isCombat: isCombat || isProc
+    isCombat
   };
 }
 
