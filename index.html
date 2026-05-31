@@ -497,6 +497,9 @@ header .sub {
       <button class="toggle-btn active" id="toggleSys">
         <span class="indicator"></span> System Chatter
       </button>
+      <button class="toggle-btn active" id="toggleCombat">
+        <span class="indicator"></span> Combat Spam
+      </button>
       <button class="toggle-btn active" id="toggleTimestamps">
         <span class="indicator"></span> Timestamps
       </button>
@@ -634,6 +637,11 @@ function parseLine(raw) {
   // Clean up quoted messages (NPC dialog)
   const isNPC = message.startsWith('"') && message.includes('"');
 
+  // Detect combat/proc spam lines
+  const isCombat = /^(You hit|Your |You activate|You use|You perform)/.test(message) &&
+    /(hit|damage|heal|endurance|health|recharge|resistance|defense|tohit|accuracy)/i.test(message);
+  const isProc = /granting (them|you) .* points of/i.test(message);
+
   return {
     raw: trimmed,
     channel,
@@ -641,7 +649,8 @@ function parseLine(raw) {
     speaker,
     message,
     isSystem: isSystem || channel === 'sys' || channel === 'help' || channel === 'request',
-    isNPC
+    isNPC,
+    isCombat: isCombat || isProc
   };
 }
 
@@ -688,6 +697,7 @@ let speakerMessageCount = {};
 
 function render() {
   const showSystem = document.getElementById('toggleSys').classList.contains('active');
+  const showCombat = document.getElementById('toggleCombat').classList.contains('active');
   const showTimestamps = document.getElementById('toggleTimestamps').classList.contains('active');
   const showChannel = document.getElementById('toggleChannelTags').classList.contains('active');
   const searchTerm = document.getElementById('speakerSearch').value.toLowerCase();
@@ -703,6 +713,9 @@ function render() {
   for (const line of parsedLines) {
     // System filter
     if (line.isSystem && !showSystem) continue;
+
+    // Combat spam filter
+    if (line.isCombat && !showCombat) continue;
 
     // Speaker filter
     if (line.speaker && !selectedSpeakers.has(line.speaker)) continue;
@@ -891,6 +904,10 @@ input.addEventListener('change', () => {
 
 // Toggles
 document.getElementById('toggleSys').addEventListener('click', function() {
+  this.classList.toggle('active');
+  render();
+});
+document.getElementById('toggleCombat').addEventListener('click', function() {
   this.classList.toggle('active');
   render();
 });
