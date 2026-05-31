@@ -946,7 +946,14 @@ document.getElementById('exportBtn').addEventListener('click', (e) => {
 document.getElementById('exportTxtBtn').addEventListener('click', (e) => {
   e.preventDefault();
   const container = document.getElementById('logContainer');
-  const text = container.textContent || container.innerText;
+  // Extract text from each log-line div and join with newlines
+  const lines = [];
+  for (const div of container.children) {
+    if (div.classList.contains('log-line')) {
+      lines.push(div.textContent || div.innerText);
+    }
+  }
+  const text = lines.join('\n');
   const blob = new Blob([text], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
