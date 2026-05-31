@@ -763,35 +763,59 @@ function renderLogOnly() {
   const totalCount = $('totalCount');
   const shownCount = $('shownCount');
 
-  let shown = 0;
-  let parts = [];
+  totalCount.textContent = parsedLines.length;
+  $('output').classList.add('visible');
+  $('controls').classList.add('visible');
 
+  // Build filter-passing subset first (fast, no DOM)
+  let visible = [];
   for (const line of parsedLines) {
     if (line.isSystem && !showSystem) continue;
     if (line.isCombat && !showCombat) continue;
     if (line.speaker && !selectedSpeakers.has(line.speaker)) continue;
-
-    const speakerColor = scheme[line.channel] || scheme.default;
-    let s = '<div class="log-line">';
-    if (showTimestamps && line.timestamp) {
-      s += '<span class="log-ts">[' + line.timestamp + ']</span>';
-    }
-    if (showChannel && line.channel !== 'default') {
-      s += '<span class="channel-' + line.channel + '" style="opacity:0.5;font-size:11px;">(' + line.channel + ') </span>';
-    }
-    if (line.speaker) {
-      s += '<span class="log-speaker" style="color:' + speakerColor + '">' + escapeHtml(line.speaker) + '</span>: ';
-    }
-    s += escapeHtml(line.message) + '</div>';
-    parts[shown] = s;
-    shown++;
+    visible[visible.length] = line;
   }
 
-  container.innerHTML = parts.join('');
-  shownCount.textContent = shown;
-  totalCount.textContent = parsedLines.length;
-  $('output').classList.add('visible');
-  $('controls').classList.add('visible');
+  shownCount.textContent = visible.length;
+
+  if (visible.length === 0) {
+    container.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:40px">No lines match the current filters.</div>';
+    return;
+  }
+
+  // Render in batches via requestAnimationFrame so UI stays responsive
+  const batchSize = 200;
+  let idx = 0;
+  let html = '';
+
+  function renderBatch() {
+    const end = Math.min(idx + batchSize, visible.length);
+    for (; idx < end; idx++) {
+      const line = visible[idx];
+      const speakerColor = scheme[line.channel] || scheme.default;
+      html += '<div class="log-line">';
+      if (showTimestamps && line.timestamp) {
+        html += '<span class="log-ts">[' + line.timestamp + ']</span>';
+      }
+      if (showChannel && line.channel !== 'default') {
+        html += '<span class="channel-' + line.channel + '" style="opacity:0.5;font-size:11px;">(' + line.channel + ') </span>';
+      }
+      if (line.speaker) {
+        html += '<span class="log-speaker" style="color:' + speakerColor + '">' + escapeHtml(line.speaker) + '</span>: ';
+      }
+      html += escapeHtml(line.message) + '</div>';
+    }
+    if (idx >= visible.length) {
+      container.innerHTML = html;
+      return;
+    }
+    // Write partial and schedule next batch
+    container.innerHTML = html;
+    html = '';
+    requestAnimationFrame(renderBatch);
+  }
+
+  renderBatch();
 }
 
 function render() {
