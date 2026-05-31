@@ -637,9 +637,15 @@ function parseLine(raw) {
   // Clean up quoted messages (NPC dialog)
   const isNPC = message.startsWith('"') && message.includes('"');
 
-  // Detect combat/proc spam lines
-  const isCombat = /^(You |Your |\w+ (hits|heals|damages|activates|uses|performs) you)/.test(message) ||
-    /(for \d+\.\d+ (health|endurance|hit|damage) points|granting .* points of|with your |with their )/i.test(message);
+  // Detect combat/proc spam lines: Panacea/Performance Shifter/etc proc messages
+  const isCombat = /(Panacea|Performance Shifter|Numina|Miracle|Synapse|Gladiator)/i.test(message) &&
+    /(heals? |hits? |damages? |for \d+\.\d+ |granting |with your |with their )/i.test(message) ||
+    // Generic combat patterns
+    /^(You (hit|heal|damage|activate|use|perform|teleport) )/.test(message) ||
+    /^(\w+ (hits|heals|damages|activates|uses|performs|teleports|Teleported|HITS|HEALS|DAMAGES) you)/.test(message) ||
+    /^(HIT |\w+ HITS )/.test(message) ||
+    /^Your .+ (power has given|is recharged|was autohit|is autohit)/.test(message) ||
+    /Combat Teleport/.test(message);
 
   return {
     raw: trimmed,
