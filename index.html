@@ -555,7 +555,8 @@ const FREE_LIMIT = 5;
 
 function getTokens() {
   const stored = localStorage.getItem(TOKEN_KEY);
-  return stored ? parseInt(stored, 10) : 0;
+  const n = stored ? parseInt(stored, 10) : 0;
+  return isNaN(n) ? 0 : n;
 }
 
 function setTokens(n) {
