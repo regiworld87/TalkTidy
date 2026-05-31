@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CoH Chatlog Parser</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0f0f13;
+  --surface: #1a1a24;
+  --surface-2: #24243a;
+  --border: #2a2a40;
+  --text: #e4e4ec;
+  --text-dim: #8888a0;
+  --accent: #7c5cfc;
+  --accent-glow: #7c5cfc44;
+  --green: #4ade80;
+  --red: #f87171;
+  --gold: #fbbf24;
+  --blue: #60a5fa;
+  --pink: #f472b6;
+  --cyan: #22d3ee;
+  --orange: #fb923c;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), var(--pink));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+header .sub {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+/* Upload Area */
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 48px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--surface);
+}
+
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: var(--accent);
+  background: var(--surface-2);
+  box-shadow: 0 0 30px var(--accent-glow);
+}
+
+.upload-zone .icon { font-size: 48px; margin-bottom: 12px; }
+.upload-zone h2 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+.upload-zone p { color: var(--text-dim); font-size: 14px; }
+
+.upload-zone.has-file {
+  border-color: var(--green);
+  padding: 24px;
+}
+
+.upload-zone .file-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.upload-zone .file-info .name {
+  font-weight: 600;
+  color: var(--green);
+}
+
+/* Controls */
+.controls {
+  display: none;
+  margin-top: 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.controls.visible {
+  display: flex;
+}
+
+.control-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.control-card h3 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+/* Speaker Filter */
+.speaker-filter {
+  flex: 1;
+  min-width: 260px;
+}
+
+.speaker-filter .search-box {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: 'Inter', sans-serif;
+  margin-bottom: 8px;
+}
+
+.speaker-filter .search-box:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.speaker-list {
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.speaker-list::-webkit-scrollbar {
+  width: 4px;
+}
+.speaker-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.speaker-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.speaker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.speaker-item:hover {
+  background: var(--surface-2);
+}
+
+.speaker-item input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+}
+
+.speaker-item .count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.speaker-item .tag {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+/* Toggles */
+.toggles {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: 'Inter', sans-serif;
+}
+
+.toggle-btn:hover {
+  border-color: var(--text-dim);
+}
+
+.toggle-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.toggle-btn .indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.toggle-btn:not(.active) .indicator {
+  background: var(--red);
+}
+
+/* Color scheme */
+.color-scheme {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.color-pick {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+
+.color-pick:hover {
+  transform: scale(1.1);
+}
+
+.color-pick.active {
+  border-color: white;
+}
+
+/* Log Output */
+.output {
+  display: none;
+  margin-top: 24px;
+}
+
+.output.visible {
+  display: block;
+}
+
+.output-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.output-toolbar .stats {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.output-toolbar .actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: 'Inter', sans-serif;
+  text-decoration: none;
+}
+
+.btn:hover {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #6a4aed;
+  border-color: #6a4aed;
+}
+
+.log-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+  line-height: 1.65;
+  max-height: 600px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.log-container::-webkit-scrollbar {
+  width: 6px;
+}
+.log-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+.log-container::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.log-line {
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.log-line:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+/* Channel colors */
+.channel-sys  { color: var(--text-dim); font-style: italic; }
+.channel-local { color: var(--green); }
+.channel-broadcast { color: var(--gold); }
+.channel-supergroup { color: var(--cyan); }
+.channel-team { color: var(--blue); }
+.channel-league { color: var(--pink); }
+.channel-tell { color: var(--orange); }
+.channel-global { color: var(--accent); }
+.channel-request { color: #a78bfa; }
+.channel-help { color: #34d399; }
+.channel-private { color: var(--pink); }
+.channel-email { color: #f59e0b; }
+.channel-default { color: var(--text); }
+
+/* Timestamp */
+.log-ts {
+  color: var(--text-dim);
+  opacity: 0.6;
+  font-size: 11px;
+  margin-right: 8px;
+}
+
+/* Speaker name */
+.log-speaker {
+  font-weight: 600;
+}
+
+/* Preview mode — for unprocessed raw toggle */
+.preview-mode .log-line {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* Token modal */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-overlay.visible {
+  display: flex;
+}
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 420px;
+  width: 90%;
+  text-align: center;
+}
+
+.modal h2 { font-size: 20px; margin-bottom: 8px; }
+.modal p { color: var(--text-dim); font-size: 14px; margin-bottom: 20px; line-height: 1.5; }
+.modal .price { font-size: 36px; font-weight: 700; color: var(--accent); margin: 16px 0; }
+.modal .price span { font-size: 16px; color: var(--text-dim); }
+.modal .btn { margin-top: 8px; }
+.modal .small { font-size: 12px; color: var(--text-dim); margin-top: 12px; }
+
+.token-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--accent-glow);
+  border: 1px solid var(--accent);
+  border-radius: 20px;
+  padding: 3px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+@media (max-width: 640px) {
+  .app { padding: 16px; }
+  .upload-zone { padding: 32px 16px; }
+  header { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .speaker-filter { min-width: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>CoH Chatlog Parser</h1>
+      <div class="sub">City of Heroes &bull; Homecoming compatible</div>
+    </div>
+    <div class="token-badge" id="tokenBadge">0 tokens</div>
+  </header>
+
+  <!-- Upload -->
+  <div class="upload-zone" id="uploadZone">
+    <div class="icon">📜</div>
+    <h2>Drop a chatlog.txt here</h2>
+    <p>or click to browse &bull; .txt files from <code style="color:var(--accent);font-size:13px;">/accounts/&lt;name&gt;/logs/</code></p>
+    <input type="file" id="fileInput" accept=".txt" style="display:none">
+  </div>
+
+  <!-- Controls -->
+  <div class="controls" id="controls">
+    <!-- Speaker Filter -->
+    <div class="control-card speaker-filter">
+      <h3>Filter Speakers</h3>
+      <input class="search-box" id="speakerSearch" type="text" placeholder="Search speakers...">
+      <div class="speaker-list" id="speakerList"></div>
+      <div style="display:flex;gap:4px;margin-top:6px">
+        <button class="toggle-btn active" id="selectAllBtn" style="font-size:11px;padding:3px 10px">
+          <span class="indicator"></span> All
+        </button>
+        <button class="toggle-btn" id="deselectAllBtn" style="font-size:11px;padding:3px 10px">
+          <span class="indicator"></span> None
+        </button>
+      </div>
+    </div>
+
+    <!-- Toggles -->
+    <div class="control-card toggles" style="flex:1;min-width:200px">
+      <h3>Filters</h3>
+      <button class="toggle-btn active" id="toggleSys">
+        <span class="indicator"></span> System Chatter
+      </button>
+      <button class="toggle-btn active" id="toggleTimestamps">
+        <span class="indicator"></span> Timestamps
+      </button>
+      <button class="toggle-btn active" id="toggleChannelTags">
+        <span class="indicator"></span> Channel Tags
+      </button>
+    </div>
+
+    <!-- Color Scheme -->
+    <div class="control-card" style="min-width:160px">
+      <h3>Color Scheme</h3>
+      <div class="color-scheme" id="colorScheme">
+        <div class="color-pick active" data-scheme="default" style="background:linear-gradient(135deg,var(--green),var(--blue),var(--gold))" title="Default"></div>
+        <div class="color-pick" data-scheme="mono" style="background:linear-gradient(135deg,#555,#888,#aaa)" title="Monochrome"></div>
+        <div class="color-pick" data-scheme="neon" style="background:linear-gradient(135deg,#ff00ff,#00ffff,#ffff00)" title="Neon"></div>
+        <div class="color-pick" data-scheme="pastel" style="background:linear-gradient(135deg,#f9a8d4,#a7f3d0,#93c5fd)" title="Pastel"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Output -->
+  <div class="output" id="output">
+    <div class="output-toolbar">
+      <div class="stats">Showing <strong id="shownCount">0</strong> of <strong id="totalCount">0</strong> lines</div>
+      <div class="actions">
+        <a class="btn" id="copyBtn" href="#">📋 Copy</a>
+        <a class="btn btn-primary" id="exportBtn" href="#">⬇ Export HTML</a>
+      </div>
+    </div>
+    <div class="log-container" id="logContainer"></div>
+  </div>
+</div>
+
+<!-- Token Modal -->
+<div class="modal-overlay" id="tokenModal">
+  <div class="modal">
+    <div style="font-size:48px;margin-bottom:8px">🪙</div>
+    <h2>Out of Tokens</h2>
+    <p>You used all your free parses. Buy more tokens to keep going.</p>
+    <div class="price">1 <span>token per log</span></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:15px;padding:12px" onclick="alert('Stripe checkout coming soon!')">
+      Buy Tokens
+    </button>
+    <p class="small">Tokens never expire &bull; Each parse costs 1 token</p>
+  </div>
+</div>
+
+<script>
+// ─── Token System ───
+const TOKEN_KEY = 'coh_parser_tokens';
+let freeTokensUsed = 0;
+const FREE_LIMIT = 5;
+
+function getTokens() {
+  const stored = localStorage.getItem(TOKEN_KEY);
+  return stored ? parseInt(stored, 10) : 0;
+}
+
+function setTokens(n) {
+  localStorage.setItem(TOKEN_KEY, Math.max(0, n));
+  updateTokenBadge();
+}
+
+function addTokens(n) {
+  setTokens(getTokens() + n);
+}
+
+function deductToken() {
+  const tokens = getTokens();
+  if (tokens > 0) {
+    setTokens(tokens - 1);
+    return true;
+  }
+  // Check free allowance
+  if (freeTokensUsed < FREE_LIMIT) {
+    freeTokensUsed++;
+    return true;
+  }
+  return false;
+}
+
+function updateTokenBadge() {
+  const t = getTokens();
+  document.getElementById('tokenBadge').textContent = `${t > 0 ? t : FREE_LIMIT - freeTokensUsed} tokens`;
+}
+
+// ─── Parsing ───
+
+// CoH chatlog format lines:
+// (channel) [Timestamp] Speaker: message
+// (channel) [Timestamp] "Quoted message from NPC or system"
+// (channel) [Timestamp] --- divider text ---
+// [Timestamp] message (sometimes no channel prefix)
+// Lines starting with --- are system dividers
+
+// Common channels: local, broadcast, supergroup, team, league, tell, global, request, help, private, email, friend
+
+function parseLine(raw) {
+  const trimmed = raw.trimEnd();
+  if (!trimmed) return null;
+
+  // Detect channel prefix: (channel)
+  let channel = 'default';
+  let rest = trimmed;
+  const chMatch = trimmed.match(/^\((\w+)\)\s*/);
+  if (chMatch) {
+    channel = chMatch[1].toLowerCase();
+    rest = trimmed.slice(chMatch[0].length);
+  }
+
+  // Extract timestamp: [HH:MM:SS] or [HH:MM]
+  let timestamp = '';
+  let content = rest;
+  const tsMatch = rest.match(/^\[(\d{1,2}:\d{2}(?::\d{2})?)\]\s*/);
+  if (tsMatch) {
+    timestamp = tsMatch[1];
+    content = rest.slice(tsMatch[0].length);
+  }
+
+  // Detect system messages
+  const isSystem = channel === 'sys' ||
+    content.startsWith('---') ||
+    content.startsWith('[') && content.includes('System') ||
+    /^(joined|left|has entered|has left|logged in|logged out)/i.test(content);
+
+  // Extract speaker
+  let speaker = '';
+  let message = content;
+  const speakerMatch = content.match(/^(.+?):\s*/);
+  if (speakerMatch && !speakerMatch[1].startsWith('---')) {
+    speaker = speakerMatch[1].trim();
+    message = content.slice(speakerMatch[0].length);
+  }
+
+  // Clean up quoted messages (NPC dialog)
+  const isNPC = message.startsWith('"') && message.includes('"');
+
+  return {
+    raw: trimmed,
+    channel,
+    timestamp,
+    speaker,
+    message,
+    isSystem: isSystem || channel === 'sys' || channel === 'help' || channel === 'request',
+    isNPC
+  };
+}
+
+// ─── Color Schemes ───
+const colorSchemes = {
+  default: {
+    sys: '#8888a0', local: '#4ade80', broadcast: '#fbbf24',
+    supergroup: '#22d3ee', team: '#60a5fa', league: '#f472b6',
+    tell: '#fb923c', global: '#7c5cfc', request: '#a78bfa',
+    help: '#34d399', private: '#f472b6', email: '#f59e0b',
+    friend: '#4ade80', default: '#e4e4ec'
+  },
+  mono: {
+    sys: '#555', local: '#ccc', broadcast: '#fff',
+    supergroup: '#aaa', team: '#999', league: '#bbb',
+    tell: '#ddd', global: '#eee', request: '#888',
+    help: '#777', private: '#bbb', email: '#999',
+    friend: '#aaa', default: '#ccc'
+  },
+  neon: {
+    sys: '#666', local: '#39ff14', broadcast: '#ff00ff',
+    supergroup: '#00ffff', team: '#0080ff', league: '#ff0080',
+    tell: '#ff6600', global: '#cc00ff', request: '#9900ff',
+    help: '#00ff80', private: '#ff00ff', email: '#ffff00',
+    friend: '#39ff14', default: '#fff'
+  },
+  pastel: {
+    sys: '#9ca3af', local: '#86efac', broadcast: '#fde68a',
+    supergroup: '#67e8f9', team: '#93c5fd', league: '#f9a8d4',
+    tell: '#fdba74', global: '#c4b5fd', request: '#ddd6fe',
+    help: '#6ee7b7', private: '#f9a8d4', email: '#fcd34d',
+    friend: '#86efac', default: '#e5e7eb'
+  }
+};
+
+let currentScheme = 'default';
+let currentLines = [];
+let parsedLines = [];
+let selectedSpeakers = new Set();
+let allSpeakers = [];
+
+// ─── Rendering ───
+
+function render() {
+  const showSystem = document.getElementById('toggleSys').classList.contains('active');
+  const showTimestamps = document.getElementById('toggleTimestamps').classList.contains('active');
+  const showChannel = document.getElementById('toggleChannelTags').classList.contains('active');
+  const searchTerm = document.getElementById('speakerSearch').value.toLowerCase();
+  const scheme = colorSchemes[currentScheme];
+
+  const container = document.getElementById('logContainer');
+  const totalCount = document.getElementById('totalCount');
+  const shownCount = document.getElementById('shownCount');
+
+  let shown = 0;
+  let html = '';
+
+  for (const line of parsedLines) {
+    // System filter
+    if (line.isSystem && !showSystem) continue;
+
+    // Speaker filter
+    if (line.speaker && !selectedSpeakers.has(line.speaker)) continue;
+
+    const chClass = `channel-${line.channel}`;
+    const speakerColor = scheme[line.channel] || scheme.default;
+
+    let lineHtml = '<div class="log-line">';
+
+    if (showTimestamps && line.timestamp) {
+      lineHtml += `<span class="log-ts">[${line.timestamp}]</span>`;
+    }
+
+    if (showChannel && line.channel !== 'default') {
+      lineHtml += `<span class="channel-${line.channel}" style="opacity:0.5;font-size:11px;">(${line.channel}) </span>`;
+    }
+
+    if (line.speaker) {
+      lineHtml += `<span class="log-speaker" style="color:${speakerColor}">${escapeHtml(line.speaker)}</span>: `;
+    }
+
+    lineHtml += escapeHtml(line.message);
+    lineHtml += '</div>';
+
+    html += lineHtml;
+    shown++;
+  }
+
+  container.innerHTML = html;
+  shownCount.textContent = shown;
+  totalCount.textContent = parsedLines.length;
+  document.getElementById('output').classList.add('visible');
+  document.getElementById('controls').classList.add('visible');
+
+  updateSpeakerList(searchTerm);
+}
+
+function updateSpeakerList(filter) {
+  const list = document.getElementById('speakerList');
+  list.innerHTML = '';
+
+  const checkedCount = selectedSpeakers.size;
+  const totalSpeakers = allSpeakers.length;
+
+  for (const s of allSpeakers) {
+    if (filter && !s.toLowerCase().includes(filter)) continue;
+    const div = document.createElement('div');
+    div.className = 'speaker-item';
+    div.innerHTML = `
+      <input type="checkbox" ${selectedSpeakers.has(s) ? 'checked' : ''}>
+      <span>${escapeHtml(s)}</span>
+      <span class="count">${countBySpeaker(s)}</span>
+    `;
+    div.querySelector('input').addEventListener('change', () => {
+      if (selectedSpeakers.has(s)) selectedSpeakers.delete(s);
+      else selectedSpeakers.add(s);
+      render();
+    });
+    list.appendChild(div);
+  }
+
+  // Update select all/deselect all button states
+  const allActive = checkedCount === totalSpeakers;
+  document.getElementById('selectAllBtn').classList.toggle('active', !allActive);
+  document.getElementById('deselectAllBtn').classList.toggle('active', checkedCount > 0);
+}
+
+function countBySpeaker(name) {
+  return parsedLines.filter(l => l.speaker === name && !l.isSystem).length;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ─── File Processing ───
+
+function processFile(text) {
+  freeTokensUsed = 0;
+  const filename = document.getElementById('fileInput').files[0]?.name || 'chatlog.txt';
+
+  const rawLines = text.split('\n');
+  currentLines = rawLines;
+  parsedLines = [];
+  allSpeakers = [];
+  selectedSpeakers = new Set();
+  const speakerCounts = {};
+
+  for (const line of rawLines) {
+    const parsed = parseLine(line);
+    if (!parsed) continue;
+    parsedLines.push(parsed);
+
+    if (parsed.speaker && !parsed.isSystem) {
+      speakerCounts[parsed.speaker] = (speakerCounts[parsed.speaker] || 0) + 1;
+    }
+  }
+
+  allSpeakers = Object.entries(speakerCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name]) => name);
+
+  selectedSpeakers = new Set(allSpeakers);
+
+  document.getElementById('uploadZone').classList.add('has-file');
+  document.getElementById('uploadZone').innerHTML = `
+    <div class="file-info">
+      <span style="font-size:24px">📄</span>
+      <span class="name">${escapeHtml(filename)}</span>
+      <span style="color:var(--text-dim)">(${rawLines.length} lines, ${parsedLines.length} parsed)</span>
+    </div>
+  `;
+
+  render();
+
+  // Deduct token
+  if (!deductToken()) {
+    document.getElementById('tokenModal').classList.add('visible');
+  }
+  updateTokenBadge();
+}
+
+// ─── Copy & Export ───
+
+document.getElementById('copyBtn').addEventListener('click', (e) => {
+  e.preventDefault();
+  const container = document.getElementById('logContainer');
+  const text = container.textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = e.currentTarget;
+    btn.textContent = '✅ Copied';
+    setTimeout(() => btn.innerHTML = '📋 Copy', 2000);
+  });
+});
+
+document.getElementById('exportBtn').addEventListener('click', (e) => {
+  e.preventDefault();
+  const container = document.getElementById('logContainer');
+  const style = document.querySelector('style').innerHTML;
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>CoH Chatlog Export</title>
+<style>body{background:#0f0f13;color:#e4e4ec;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.65;padding:24px;max-width:900px;margin:0 auto}.log-line{padding:1px 4px}.log-line:hover{background:rgba(255,255,255,0.03)}
+.log-ts{color:#8888a0;opacity:0.6;font-size:11px;margin-right:8px}.log-speaker{font-weight:600}</style></head>
+<body>${container.innerHTML}</body></html>`;
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'coh-chatlog-export.html';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ─── Event Binding ───
+
+// Upload
+const zone = document.getElementById('uploadZone');
+const input = document.getElementById('fileInput');
+
+zone.addEventListener('click', () => input.click());
+zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+zone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  zone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    input.files = e.dataTransfer.files;
+    const reader = new FileReader();
+    reader.onload = (ev) => processFile(ev.target.result);
+    reader.readAsText(file);
+  }
+});
+input.addEventListener('change', () => {
+  const file = input.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = (ev) => processFile(ev.target.result);
+    reader.readAsText(file);
+  }
+});
+
+// Toggles
+document.getElementById('toggleSys').addEventListener('click', function() {
+  this.classList.toggle('active');
+  render();
+});
+document.getElementById('toggleTimestamps').addEventListener('click', function() {
+  this.classList.toggle('active');
+  render();
+});
+document.getElementById('toggleChannelTags').addEventListener('click', function() {
+  this.classList.toggle('active');
+  render();
+});
+
+// Select all / deselect all
+document.getElementById('selectAllBtn').addEventListener('click', function() {
+  selectedSpeakers = new Set(allSpeakers);
+  this.classList.add('active');
+  document.getElementById('deselectAllBtn').classList.remove('active');
+  render();
+});
+document.getElementById('deselectAllBtn').addEventListener('click', function() {
+  selectedSpeakers = new Set();
+  this.classList.add('active');
+  document.getElementById('selectAllBtn').classList.remove('active');
+  render();
+});
+
+// Speaker search
+document.getElementById('speakerSearch').addEventListener('input', () => render());
+
+// Color scheme
+document.querySelectorAll('.color-pick').forEach(el => {
+  el.addEventListener('click', function() {
+    document.querySelectorAll('.color-pick').forEach(c => c.classList.remove('active'));
+    this.classList.add('active');
+    currentScheme = this.dataset.scheme;
+    render();
+  });
+});
+
+// Modal close on outside click
+document.getElementById('tokenModal').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.remove('visible');
+});
+
+// Init
+updateTokenBadge();
+</script>
+</body>
+</html>
