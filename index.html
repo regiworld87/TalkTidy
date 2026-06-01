@@ -1072,6 +1072,16 @@ input.addEventListener('change', () => {
   }
 });
 
+// Debounce helper — coalesces rapid calls into one
+function debounceRender(fn) {
+  let timer;
+  return function() {
+    fn.call(this);
+    clearTimeout(timer);
+    timer = setTimeout(fn, 0);
+  };
+}
+
 // Toggles
 document.getElementById('toggleSys').addEventListener('click', function() {
   this.classList.toggle('active');
