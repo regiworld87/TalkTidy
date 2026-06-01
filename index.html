@@ -809,7 +809,7 @@ function renderLogOnly() {
 
   // Build the virtual scroll structure
   container.innerHTML =
-    '<div class="vs-outer" style="overflow:hidden;position:relative;height:' + (visible.length * ROW_H) + 'px">' +
+    '<div class="vs-outer" style="position:relative;height:' + (visible.length * ROW_H) + 'px">' +
       '<div class="vs-inner" style="position:relative"></div>' +
     '</div>';
 
@@ -819,11 +819,15 @@ function renderLogOnly() {
   function renderWindow(scrollTop) {
     const start = Math.max(0, Math.floor(scrollTop / ROW_H) - BUFFER);
     const end = Math.min(CACHE.length, Math.ceil((scrollTop + 600) / ROW_H) + BUFFER);
-    let html = '';
+    // Build in normal flow — one flat string of divs, no absolute positioning
+    // Use padding-top on inner to offset the window, padding-bottom for trailing space
+    const padTop = (start * ROW_H);
+    const padBottom = ((CACHE.length - end) * ROW_H);
+    let html = '<div style="padding-top:' + padTop + 'px;padding-bottom:' + padBottom + 'px">';
     for (let i = start; i < end; i++) {
       const l = CACHE[i];
       const spc = scheme[l.channel] || scheme.default;
-      html += '<div class="log-line" style="position:absolute;top:' + (i * ROW_H) + 'px;left:0;right:0">';
+      html += '<div class="log-line">';
       if (showTimestamps && l.timestamp) html += '<span class="log-ts">[' + escapeHtml(l.timestamp) + ']</span>';
       if (showChannel && l.channel !== 'default') html += '<span class="channel-' + l.channel + '" style="opacity:0.5;font-size:11px;">(' + l.channel + ') </span>';
       if (l.speaker) { html += '<span class="log-speaker" style="color:' + spc + '">' + escapeHtml(l.speaker) + '</span>'; if (!l.isEmote) html += ': '; }
@@ -831,6 +835,7 @@ function renderLogOnly() {
       else html += escapeHtml(l.message);
       html += '</div>';
     }
+    html += '</div>';
     inner.innerHTML = html;
   }
 
