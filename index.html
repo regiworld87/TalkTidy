@@ -768,8 +768,9 @@ function $(id) {
   return document.getElementById(id);
 }
 
-// ─── Virtual scroller: only keeps visible rows in DOM ───
-let _vs = null; // virtual scroller state
+// ─── Scroll-to-load render with DOM cap ───
+// Renders in chunks as user scrolls, caps total DOM at ~2000 lines
+let _vs = null;
 
 function renderLogOnly() {
   const showSystem = $('toggleSys').classList.contains('active');
@@ -786,7 +787,7 @@ function renderLogOnly() {
   $('output').classList.add('visible');
   $('controls').classList.add('visible');
 
-  // Build filtered subset (fast, no DOM)
+  // Build filtered subset
   let visible = [];
   for (const line of parsedLines) {
     if (line.isSystem && !showSystem) continue;
@@ -803,63 +804,63 @@ function renderLogOnly() {
     return;
   }
 
-  const ROW_H = 24;
-  const BUFFER = 60;
-  const CACHE = visible; // reference kept for scroll updates
+  const MAX_DOM = 2000;
+  const CHUNK = 500;
 
-  // Build the virtual scroll structure
-  container.innerHTML =
-    '<div class="vs-outer" style="position:relative;height:' + (visible.length * ROW_H) + 'px">' +
-      '<div class="vs-inner" style="position:relative"></div>' +
-    '</div>';
-
-  const outer = container.firstElementChild;
-  const inner = outer.firstElementChild;
-
-  function renderWindow(scrollTop) {
-    const start = Math.max(0, Math.floor(scrollTop / ROW_H) - BUFFER);
-    const end = Math.min(CACHE.length, Math.ceil((scrollTop + 600) / ROW_H) + BUFFER);
-    // Build in normal flow — one flat string of divs, no absolute positioning
-    // Use padding-top on inner to offset the window, padding-bottom for trailing space
-    const padTop = (start * ROW_H);
-    const padBottom = ((CACHE.length - end) * ROW_H);
-    let html = '<div style="padding-top:' + padTop + 'px;padding-bottom:' + padBottom + 'px">';
-    for (let i = start; i < end; i++) {
-      const l = CACHE[i];
-      const spc = scheme[l.channel] || scheme.default;
-      html += '<div class="log-line">';
-      if (showTimestamps && l.timestamp) html += '<span class="log-ts">[' + escapeHtml(l.timestamp) + ']</span>';
-      if (showChannel && l.channel !== 'default') html += '<span class="channel-' + l.channel + '" style="opacity:0.5;font-size:11px;">(' + l.channel + ') </span>';
-      if (l.speaker) { html += '<span class="log-speaker" style="color:' + spc + '">' + escapeHtml(l.speaker) + '</span>'; if (!l.isEmote) html += ': '; }
-      if (l.isEmote) html += '<span style="font-style:italic"> ' + escapeHtml(l.message) + '</span>';
-      else html += escapeHtml(l.message);
-      html += '</div>';
-    }
-    html += '</div>';
-    inner.innerHTML = html;
+  function renderLine(l) {
+    const spc = scheme[l.channel] || scheme.default;
+    let h = '<div class="log-line">';
+    if (showTimestamps && l.timestamp) h += '<span class="log-ts">[' + escapeHtml(l.timestamp) + ']</span>';
+    if (showChannel && l.channel !== 'default') h += '<span class="channel-' + l.channel + '" style="opacity:0.5;font-size:11px;">(' + l.channel + ') </span>';
+    if (l.speaker) { h += '<span class="log-speaker" style="color:' + spc + '">' + escapeHtml(l.speaker) + '</span>'; if (!l.isEmote) h += ': '; }
+    if (l.isEmote) h += '<span style="font-style:italic"> ' + escapeHtml(l.message) + '</span>';
+    else h += escapeHtml(l.message);
+    h += '</div>';
+    return h;
   }
 
-  // Initial render
-  renderWindow(0);
+  // Render first chunk
+  const firstChunk = visible.slice(0, MAX_DOM);
+  let html = '';
+  for (const l of firstChunk) html += renderLine(l);
+  container.innerHTML = html;
 
-  // Scroll handler with rAF throttling
-  let ticking = false;
-  const onScroll = () => {
-    if (!ticking) {
-      ticking = true;
-      requestAnimationFrame(() => {
-        renderWindow(container.scrollTop);
-        ticking = false;
-      });
+  // If more, attach scroll-to-load
+  if (visible.length > MAX_DOM) {
+    let rendered = MAX_DOM;
+    const sentinel = document.createElement('div');
+    sentinel.className = 'load-more';
+    sentinel.style.cssText = 'text-align:center;color:var(--text-dim);font-size:12px;padding:8px';
+    sentinel.textContent = rendered + ' / ' + visible.length + ' lines — scroll to load more';
+    container.appendChild(sentinel);
+
+    function loadMore() {
+      const end = Math.min(rendered + CHUNK, visible.length);
+      let extra = '';
+      for (let i = rendered; i < end; i++) extra += renderLine(visible[i]);
+      container.insertAdjacentHTML('beforeend', extra);
+      rendered = end;
+
+      // Trim old rows if DOM gets huge (remove oldest CHUNK lines)
+      const lines = container.querySelectorAll('.log-line');
+      if (lines.length > MAX_DOM + CHUNK) {
+        const toRemove = lines.length - MAX_DOM;
+        for (let i = 0; i < toRemove; i++) lines[i].remove();
+      }
+
+      if (rendered < visible.length) {
+        sentinel.textContent = rendered + ' / ' + visible.length + ' lines — scroll to load more';
+      } else {
+        sentinel.remove();
+      }
     }
-  };
-  container.addEventListener('scroll', onScroll, { passive: true });
 
-  // Store cleanup reference
-  _vs = {
-    cache: CACHE,
-    cleanup() { container.removeEventListener('scroll', onScroll); }
-  };
+    const obs = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) loadMore();
+    }, { root: container, rootMargin: '600px' });
+    obs.observe(sentinel);
+    _vs = { obs };
+  }
 }
 
 function render() {
