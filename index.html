@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CoH Chatlog Parser</title>
+<script defer src="https://cloud.umami.is/script.js" data-website-id="2ac2a625-6cb3-4e8b-8234-360cece391bf"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -691,7 +692,10 @@ function parseLine(raw) {
     /^Your .+ has given you/.test(rest) ||
     /Combat Teleport/.test(rest) ||
     /You're too far away to use/.test(rest) ||
-    /has Teleported you/.test(rest);
+    /has Teleported you/.test(rest) ||
+    /has defeated/.test(rest) ||
+    /has killed/.test(rest) ||
+    /defeated by/.test(rest);
 
   // Quoted messages (NPC dialog)
   const isNPC = message.startsWith('"') && message.includes('"');
@@ -764,6 +768,9 @@ function $(id) {
   return document.getElementById(id);
 }
 
+// ─── Virtual scroller: only keeps visible rows in DOM ───
+let _vs = null; // virtual scroller state
+
 function renderLogOnly() {
   const showSystem = $('toggleSys').classList.contains('active');
   const showCombat = $('toggleCombat').classList.contains('active');
@@ -779,7 +786,7 @@ function renderLogOnly() {
   $('output').classList.add('visible');
   $('controls').classList.add('visible');
 
-  // Build filter-passing subset first (fast, no DOM)
+  // Build filtered subset (fast, no DOM)
   let visible = [];
   for (const line of parsedLines) {
     if (line.isSystem && !showSystem) continue;
@@ -792,33 +799,62 @@ function renderLogOnly() {
 
   if (visible.length === 0) {
     container.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:40px">No lines match the current filters.</div>';
+    _vs = null;
     return;
   }
 
-  // Render everything in one shot (build string, one innerHTML)
-  // No batching needed — for typical chatlogs this is <20ms
-  let html = '';
-  for (const line of visible) {
-    const speakerColor = scheme[line.channel] || scheme.default;
-    html += '<div class="log-line">';
-    if (showTimestamps && line.timestamp) {
-      html += '<span class="log-ts">[' + line.timestamp + ']</span>';
+  const ROW_H = 24;
+  const BUFFER = 60;
+  const CACHE = visible; // reference kept for scroll updates
+
+  // Build the virtual scroll structure
+  container.innerHTML =
+    '<div class="vs-outer" style="overflow:hidden;position:relative;height:' + (visible.length * ROW_H) + 'px">' +
+      '<div class="vs-inner" style="position:relative"></div>' +
+    '</div>';
+
+  const outer = container.firstElementChild;
+  const inner = outer.firstElementChild;
+
+  function renderWindow(scrollTop) {
+    const start = Math.max(0, Math.floor(scrollTop / ROW_H) - BUFFER);
+    const end = Math.min(CACHE.length, Math.ceil((scrollTop + 600) / ROW_H) + BUFFER);
+    let html = '';
+    for (let i = start; i < end; i++) {
+      const l = CACHE[i];
+      const spc = scheme[l.channel] || scheme.default;
+      html += '<div class="log-line" style="position:absolute;top:' + (i * ROW_H) + 'px;left:0;right:0">';
+      if (showTimestamps && l.timestamp) html += '<span class="log-ts">[' + escapeHtml(l.timestamp) + ']</span>';
+      if (showChannel && l.channel !== 'default') html += '<span class="channel-' + l.channel + '" style="opacity:0.5;font-size:11px;">(' + l.channel + ') </span>';
+      if (l.speaker) { html += '<span class="log-speaker" style="color:' + spc + '">' + escapeHtml(l.speaker) + '</span>'; if (!l.isEmote) html += ': '; }
+      if (l.isEmote) html += '<span style="font-style:italic"> ' + escapeHtml(l.message) + '</span>';
+      else html += escapeHtml(l.message);
+      html += '</div>';
     }
-    if (showChannel && line.channel !== 'default') {
-      html += '<span class="channel-' + line.channel + '" style="opacity:0.5;font-size:11px;">(' + line.channel + ') </span>';
-    }
-    if (line.speaker) {
-      html += '<span class="log-speaker" style="color:' + speakerColor + '">' + escapeHtml(line.speaker) + '</span>';
-      if (!line.isEmote) html += ': ';
-    }
-    if (line.isEmote) {
-      html += '<span style="font-style:italic"> ' + escapeHtml(line.message) + '</span>';
-    } else {
-      html += escapeHtml(line.message);
-    }
-    html += '</div>';
+    inner.innerHTML = html;
   }
-  container.innerHTML = html;
+
+  // Initial render
+  renderWindow(0);
+
+  // Scroll handler with rAF throttling
+  let ticking = false;
+  const onScroll = () => {
+    if (!ticking) {
+      ticking = true;
+      requestAnimationFrame(() => {
+        renderWindow(container.scrollTop);
+        ticking = false;
+      });
+    }
+  };
+  container.addEventListener('scroll', onScroll, { passive: true });
+
+  // Store cleanup reference
+  _vs = {
+    cache: CACHE,
+    cleanup() { container.removeEventListener('scroll', onScroll); }
+  };
 }
 
 function render() {
@@ -914,13 +950,57 @@ function processFile(text) {
   updateTokenBadge();
 }
 
+// ─── Helper: build raw text from visible data ───
+function getVisibleText() {
+  const showSys = $('toggleSys').classList.contains('active');
+  const showCbt = $('toggleCombat').classList.contains('active');
+  const showTs = $('toggleTimestamps').classList.contains('active');
+  const showCh = $('toggleChannelTags').classList.contains('active');
+  const lines = [];
+  for (const l of parsedLines) {
+    if (l.isSystem && !showSys) continue;
+    if (l.isCombat && !showCbt) continue;
+    if (l.speaker && !selectedSpeakers.has(l.speaker)) continue;
+    let s = '';
+    if (showTs && l.timestamp) s += '[' + l.timestamp + ']';
+    if (showCh && l.channel !== 'default') s += '(' + l.channel + ') ';
+    if (l.speaker) { s += l.speaker; if (!l.isEmote) s += ': '; }
+    s += l.message;
+    lines.push(s);
+  }
+  return lines;
+}
+
+// ─── Helper: build HTML for all visible lines (for export) ───
+function getVisibleHtml() {
+  const showSys = $('toggleSys').classList.contains('active');
+  const showCbt = $('toggleCombat').classList.contains('active');
+  const showTs = $('toggleTimestamps').classList.contains('active');
+  const showCh = $('toggleChannelTags').classList.contains('active');
+  const scheme = colorSchemes[currentScheme];
+  let html = '';
+  for (const l of parsedLines) {
+    if (l.isSystem && !showSys) continue;
+    if (l.isCombat && !showCbt) continue;
+    if (l.speaker && !selectedSpeakers.has(l.speaker)) continue;
+    const speakerColor = scheme[l.channel] || scheme.default;
+    html += '<div class="log-line">';
+    if (showTs && l.timestamp) html += '<span class="log-ts">[' + l.timestamp + ']</span>';
+    if (showCh && l.channel !== 'default') html += '<span class="channel-' + l.channel + '" style="opacity:0.5;font-size:11px;">(' + l.channel + ') </span>';
+    if (l.speaker) { html += '<span class="log-speaker" style="color:' + speakerColor + '">' + escapeHtml(l.speaker) + '</span>'; if (!l.isEmote) html += ': '; }
+    if (l.isEmote) { html += '<span style="font-style:italic"> ' + escapeHtml(l.message) + '</span>'; }
+    else { html += escapeHtml(l.message); }
+    html += '</div>';
+  }
+  return html;
+}
+
 // ─── Copy & Export ───
 
 document.getElementById('copyBtn').addEventListener('click', (e) => {
   e.preventDefault();
-  const container = document.getElementById('logContainer');
-  const text = container.textContent;
-  navigator.clipboard.writeText(text).then(() => {
+  const lines = getVisibleText();
+  navigator.clipboard.writeText(lines.join('\n')).then(() => {
     const btn = e.currentTarget;
     btn.textContent = '✅ Copied';
     setTimeout(() => btn.innerHTML = '📋 Copy', 2000);
@@ -929,14 +1009,14 @@ document.getElementById('copyBtn').addEventListener('click', (e) => {
 
 document.getElementById('exportBtn').addEventListener('click', (e) => {
   e.preventDefault();
-  const container = document.getElementById('logContainer');
   const style = document.querySelector('style').innerHTML;
+  const bodyHtml = getVisibleHtml();
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><title>CoH Chatlog Export</title>
 <style>body{background:#0f0f13;color:#e4e4ec;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.65;padding:24px;max-width:900px;margin:0 auto}.log-line{padding:1px 4px}.log-line:hover{background:rgba(255,255,255,0.03)}
 .log-ts{color:#8888a0;opacity:0.6;font-size:11px;margin-right:8px}.log-speaker{font-weight:600}</style></head>
-<body>${container.innerHTML}</body></html>`;
+<body>${bodyHtml}</body></html>`;
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -948,16 +1028,8 @@ document.getElementById('exportBtn').addEventListener('click', (e) => {
 
 document.getElementById('exportTxtBtn').addEventListener('click', (e) => {
   e.preventDefault();
-  const container = document.getElementById('logContainer');
-  // Extract text from each log-line div and join with newlines
-  const lines = [];
-  for (const div of container.children) {
-    if (div.classList.contains('log-line')) {
-      lines.push(div.textContent || div.innerText);
-    }
-  }
-  const text = lines.join('\n');
-  const blob = new Blob([text], { type: 'text/plain' });
+  const lines = getVisibleText();
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
