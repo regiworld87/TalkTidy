@@ -501,6 +501,9 @@ header .sub {
       <button class="toggle-btn active" id="toggleCombat">
         <span class="indicator"></span> Combat Spam
       </button>
+      <button class="toggle-btn active" id="toggleCombatChatter">
+        <span class="indicator"></span> Combat Chatter
+      </button>
       <button class="toggle-btn active" id="toggleTimestamps">
         <span class="indicator"></span> Timestamps
       </button>
@@ -657,9 +660,16 @@ function parseLine(raw) {
     message = rest.slice(speakerMatch[0].length);
   }
 
+  // Combat Chatter detection — enemy attack rolls, damage, status effects
+  // Must come BEFORE emote detection so combat lines don't get misclassified
+  let isCombatChatter = false;
+  if (!speaker) {
+    isCombatChatter = /(?:MISSES!\s|HITS you!\s|power had a \d+(?:\.\d+)?% chance|hits you with their|effect reduces your|(?:Sleeps|Holds|Stuns|Immobilizes|Mesmerizes|Dominates|Defeats) you with|for \d+(?:\.\d+)? points of \w+ damage|over time\))/i.test(rest);
+  }
+
   // Emote detection: \"Go Fetch waves to Valor.\" (no colon, starts with name)
   let isEmote = false;
-  if (!speaker) {
+  if (!speaker && !isCombatChatter) {
     const emoteMatch = rest.match(/^([A-Z][a-zA-Z'\-]+(?:\s+[A-Z][a-zA-Z'\-]*)?)\s+(.+)/);
     if (emoteMatch && !rest.match(/^(Entering|Shutting|Joined|Left|You |Your |Using |Welcome )/i)) {
       speaker = emoteMatch[1].trim();
@@ -677,7 +687,7 @@ function parseLine(raw) {
   }
 
   // Detect system messages (no colon, no emote = system line)
-  const isSystem = (speaker === '' && !isEmote) ||
+  const isSystem = (speaker === '' && !isEmote && !isCombatChatter) ||
     /^(Joined|Left|Entering|Shutting|You have|You may|You are|Using global|Welcome|Your .+ was waived)/.test(message) ||
     message.startsWith('---') ||
     channel === 'sys' ||
@@ -709,7 +719,8 @@ function parseLine(raw) {
     isSystem,
     isNPC,
     isCombat,
-    isEmote
+    isEmote,
+    isCombatChatter
   };
 }
 
@@ -758,7 +769,7 @@ let speakerMessageCount = {};
 let _logContainer, _totalCount, _shownCount, _output, _controls, _speakerList;
 function $(id) {
   const map = { logContainer:1, totalCount:1, shownCount:1, output:1, controls:1, speakerList:1,
-    toggleSys:1, toggleCombat:1, toggleTimestamps:1, toggleChannelTags:1, speakerSearch:1,
+    toggleSys:1, toggleCombat:1, toggleCombatChatter:1, toggleTimestamps:1, toggleChannelTags:1, speakerSearch:1,
     selectAllBtn:1, deselectAllBtn:1, tokenBadge:1, tokenModal:1, fileInput:1, uploadZone:1,
     logContainer:1, copyBtn:1, exportTxtBtn:1, exportBtn:1, colorScheme:1 };
   if (map[id]) {
@@ -775,6 +786,7 @@ let _vs = null;
 function renderLogOnly() {
   const showSystem = $('toggleSys').classList.contains('active');
   const showCombat = $('toggleCombat').classList.contains('active');
+  const showCombatChatter = $('toggleCombatChatter').classList.contains('active');
   const showTimestamps = $('toggleTimestamps').classList.contains('active');
   const showChannel = $('toggleChannelTags').classList.contains('active');
   const scheme = colorSchemes[currentScheme];
@@ -792,6 +804,7 @@ function renderLogOnly() {
   for (const line of parsedLines) {
     if (line.isSystem && !showSystem) continue;
     if (line.isCombat && !showCombat) continue;
+    if (line.isCombatChatter && !showCombatChatter) continue;
     if (line.speaker && !selectedSpeakers.has(line.speaker)) continue;
     visible[visible.length] = line;
   }
@@ -960,12 +973,14 @@ function processFile(text) {
 function getVisibleText() {
   const showSys = $('toggleSys').classList.contains('active');
   const showCbt = $('toggleCombat').classList.contains('active');
+  const showCbtChatter = $('toggleCombatChatter').classList.contains('active');
   const showTs = $('toggleTimestamps').classList.contains('active');
   const showCh = $('toggleChannelTags').classList.contains('active');
   const lines = [];
   for (const l of parsedLines) {
     if (l.isSystem && !showSys) continue;
     if (l.isCombat && !showCbt) continue;
+    if (l.isCombatChatter && !showCbtChatter) continue;
     if (l.speaker && !selectedSpeakers.has(l.speaker)) continue;
     let s = '';
     if (showTs && l.timestamp) s += '[' + l.timestamp + ']';
@@ -981,6 +996,7 @@ function getVisibleText() {
 function getVisibleHtml() {
   const showSys = $('toggleSys').classList.contains('active');
   const showCbt = $('toggleCombat').classList.contains('active');
+  const showCbtChatter = $('toggleCombatChatter').classList.contains('active');
   const showTs = $('toggleTimestamps').classList.contains('active');
   const showCh = $('toggleChannelTags').classList.contains('active');
   const scheme = colorSchemes[currentScheme];
@@ -988,6 +1004,7 @@ function getVisibleHtml() {
   for (const l of parsedLines) {
     if (l.isSystem && !showSys) continue;
     if (l.isCombat && !showCbt) continue;
+    if (l.isCombatChatter && !showCbtChatter) continue;
     if (l.speaker && !selectedSpeakers.has(l.speaker)) continue;
     const speakerColor = scheme[l.channel] || scheme.default;
     html += '<div class="log-line">';
@@ -1088,6 +1105,10 @@ document.getElementById('toggleSys').addEventListener('click', function() {
   renderLogOnly();
 });
 document.getElementById('toggleCombat').addEventListener('click', function() {
+  this.classList.toggle('active');
+  renderLogOnly();
+});
+document.getElementById('toggleCombatChatter').addEventListener('click', function() {
   this.classList.toggle('active');
   renderLogOnly();
 });
